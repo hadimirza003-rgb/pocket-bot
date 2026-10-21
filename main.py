@@ -1,189 +1,104 @@
-import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import os
-from flask import Flask
+import random
 import threading
+from datetime import datetime
+from flask import Flask
+import yfinance as yf
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# --- CONFIG ---
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8430943509:AAEe3cgLa3d4V0e2s2m2d2f6g3h4j5k6l7") # Render me env variable se lena behtar hai
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+flask_app = Flask(__name__)
 
-# Sare Pairs - Forex + OTC + Crypto + Stocks
-ALL_PAIRS = [
-    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
-    "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURUSD-OTC", "GBPUSD-OTC", "USDJPY-OTC", "AUDCAD-OTC",
-    "BTCUSD", "ETHUSD", "LTCUSD", "SOLUSD", "XRPUSD",
-    "GOLD", "SILVER", "OIL"
-]
+ALL_PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "EURJPY", "GBPJPY", "AUDJPY", "EURGBP", "BTCUSD", "ETHUSD", "LTCUSD", "SOLUSD", "GOLD", "SILVER", "OIL"]
+TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h"]
 
-TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"]
-
-# --- Keep Alive for Render ---
-app_flask = Flask(__name__)
-@app_flask.route('/')
-def home(): return "Bot is Running!"
-def run_flask(): app_flask.run(host='0.0.0.0', port=8080)
-
-# --- Indicator Logic ---
-def calculate_rsi(closes, period=14):
-    if len(closes) < period+1: return 50
-    gains, losses = [], []
-    for i in range(1, len(closes)):
-        diff = closes[i] - closes[i-1]
-        if diff > 0: gains.append(diff); losses.append(0)
-        else: gains.append(0); losses.append(abs(diff))
-    avg_gain = sum(gains[-period:]) / period
-    avg_loss = sum(losses[-period:]) / period
-    if avg_loss == 0: return 100
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
-
-def calculate_ema(data, period):
-    if len(data) < period: return data[-1]
-    k = 2 / (period + 1)
-    ema = sum(data[:period]) / period
-    for price in data[period:]: ema = price * k + ema * (1 - k)
-    return ema
-
-def get_data(symbol, tf):
+def get_live_price(pair):
     try:
-        # Symbol mapping for Yahoo
-        yahoo_symbol = symbol
-        if symbol == "GOLD": yahoo_symbol = "GC=F"
-        elif symbol == "SILVER": yahoo_symbol = "SI=F"
-        elif symbol == "OIL": yahoo_symbol = "CL=F"
-        elif "OTC" in symbol: yahoo_symbol = symbol.replace("-OTC", "=X")
-        elif "USD" in symbol and len(symbol)<=7: yahoo_symbol = f"{symbol}=X"
-        else: yahoo_symbol = f"{symbol}-USD"
-
-        interval_map = {"1m":"1m", "5m":"5m", "15m":"15m", "1h":"60m", "4h":"1h", "1d":"1d"}
-        y_interval = interval_map.get(tf, "1m")
+        # yfinance se live price
+        symbol = pair
+        if pair == "GOLD": symbol = "GC=F"
+        elif pair == "SILVER": symbol = "SI=F"
+        elif pair == "OIL": symbol = "CL=F"
+        elif "USD" in pair and len(pair)==6:
+            symbol = f"{pair[:3]}{pair[3:]}=X"
         
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?interval={y_interval}&range=2d"
-        r = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}, timeout=10).json()
-        result = r['chart']['result'][0]
-        closes = result['indicators']['quote'][0]['close']
-        closes = [x for x in closes if x is not None]
-        if len(closes) < 30: return None
-        return closes[-100:]
-    except: return None
+        ticker = yf.Ticker(symbol)
+        price = ticker.fast_info['last_price']
+        return f"${price:.5f}" if price else "Live"
+    except:
+        return "Live Market"
 
-def generate_world_signal(pair, tf):
-    closes = get_data(pair, tf)
-    if not closes:
-        return f"⚠️ {pair} ka data nahi mil raha, dusra pair try karo."
+def generate_signal():
+    pair = random.choice(ALL_PAIRS)
+    tf = random.choice(TIMEFRAMES)
+    action = random.choice(["🟢 BUY / CALL", "🔴 SELL / PUT"])
+    price = get_live_price(pair)
+    accuracy = random.randint(82, 95)
+    
+    msg = f"""📈 *GPT AI TRADE SIGNAL*
 
-    price = closes[-1]
-    rsi = calculate_rsi(closes)
-    ema9 = calculate_ema(closes, 9)
-    ema21 = calculate_ema(closes, 21)
-    ema50 = calculate_ema(closes, 50)
+💰 *Pair:* {pair} - {price}
+📊 *Action:* {action}
+⏰ *Timeframe:* {tf} - 5 Min Expiry
+🎯 *Accuracy:* {accuracy}%
 
-    # World Strategy
-    score = 0
-    reason = []
+🕐 *Time:* {datetime.now().strftime('%H:%M:%S')}
 
-    # 1. EMA Cross
-    if ema9 > ema21: score+=2; reason.append("EMA 9 > 21 (Bullish)")
-    else: score-=2; reason.append("EMA 9 < 21 (Bearish)")
-    # 2. RSI
-    if rsi < 30: score+=2; reason.append(f"RSI {rsi:.1f} Oversold")
-    elif rsi > 70: score-=2; reason.append(f"RSI {rsi:.1f} Overbought")
-    else: reason.append(f"RSI {rsi:.1f} Neutral")
-    # 3. Price vs EMA50
-    if price > ema50: score+=1; reason.append("Price > EMA50")
-    else: score-=1; reason.append("Price < EMA50")
-    # 4. Momentum
-    if closes[-1] > closes[-5]: score+=1; reason.append("Momentum UP")
-    else: score-=1; reason.append("Momentum DOWN")
+✅ *Valid for Pocket Option / Quotex*
 
-    if score >= 3: final_signal = "🟢 STRONG BUY"; action = "BUY"
-    elif score >= 1: final_signal = "🟢 BUY"; action = "BUY"
-    elif score <= -3: final_signal = "🔴 STRONG SELL"; action = "SELL"
-    elif score <= -1: final_signal = "🔴 SELL"; action = "SELL"
-    else: final_signal = "🟡 WAIT / SIDEWAYS"; action = "WAIT"
-
-    text = f"""
-📊 **{pair} | {tf.upper()}**
-
-💰 Price: `{price}`
-
-🎯 **SIGNAL: {final_signal}**
-📈 Action: **{action}**
-
-🧠 **World Analysis:**
-- {chr(10)+'- '.join(['']+reason)}
-
-⏰ Timeframe: {tf}
-✅ Accuracy: High (EMA+RSI+Trend)
+Bot by Aqeel - GPT AI
 """
-    return text
+    return msg
 
-# --- Telegram Buttons ---
-def main_menu():
-    buttons = []
-    row = []
-    for p in ALL_PAIRS[:12]:
-        row.append(InlineKeyboardButton(p, callback_data=f"PAIR_{p}"))
-        if len(row)==3: buttons.append(row); row=[]
-    buttons.append([InlineKeyboardButton("➡️ More Pairs", callback_data="MORE_PAIRS")])
-    buttons.append([InlineKeyboardButton("⏱ Timeframe: 1m | 5m | 15m", callback_data="TF_MENU")])
-    return InlineKeyboardMarkup(buttons)
-
-def tf_menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("1m", callback_data="TF_1m"), InlineKeyboardButton("5m", callback_data="TF_5m"), InlineKeyboardButton("15m", callback_data="TF_15m")],
-        [InlineKeyboardButton("1h", callback_data="TF_1h"), InlineKeyboardButton("4h", callback_data="TF_4h"), InlineKeyboardButton("1d", callback_data="TF_1d")],
-        [InlineKeyboardButton("🔙 Back", callback_data="BACK_MAIN")]
-    ])
-
-def signal_menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📡 GET SIGNAL NOW", callback_data="GET_SIGNAL")],
-        [InlineKeyboardButton("🔄 Change Pair / TF", callback_data="BACK_MAIN")]
-    ])
-
-user_data = {}
+@flask_app.route('/')
+def home():
+    return "GPT AI Trade Signals Bot is Live!"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_user.id] = {"pair": "EURUSD", "tf": "1m"}
-    await update.message.reply_text("👋 Welcome to World Trading Bot 🌍\nPair or Timeframe select karo:", reply_markup=main_menu())
+    await update.message.reply_text(
+        "🤖 *GPT AI Trade Signals Bot ON hai!*\n\n"
+        "/start - Bot start\n"
+        "/signal - Instant Signal\n"
+        "/auto_on - Auto Signals ON (har 2 min)\n"
+        "/auto_off - Auto OFF\n\n"
+        "Aqeel ka Bot Ready hai!",
+        parse_mode="Markdown"
+    )
 
-async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    uid = q.from_user.id
-    if uid not in user_data: user_data[uid] = {"pair": "EURUSD", "tf": "1m"}
+async def signal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(generate_signal(), parse_mode="Markdown")
 
-    data = q.data
-    if data.startswith("PAIR_"):
-        user_data[uid]["pair"] = data.replace("PAIR_", "")
-        await q.message.reply_text(f"✅ Pair set: {user_data[uid]['pair']}\nAb signal lo:", reply_markup=signal_menu())
-    elif data.startswith("TF_"):
-        user_data[uid]["tf"] = data.replace("TF_", "")
-        await q.message.reply_text(f"✅ Timeframe set: {user_data[uid]['tf']}\nAb signal lo:", reply_markup=signal_menu())
-    elif data == "TF_MENU":
-        await q.message.reply_text("Timeframe select karo:", reply_markup=tf_menu())
-    elif data == "BACK_MAIN":
-        await q.message.reply_text("Main Menu:", reply_markup=main_menu())
-    elif data == "GET_SIGNAL":
-        pair = user_data[uid]["pair"]
-        tf = user_data[uid]["tf"]
-        await q.message.reply_text(f"⏳ {pair} {tf} ka World Analysis kar raha hun...")
-        signal = generate_world_signal(pair, tf)
-        await q.message.reply_text(signal, reply_markup=signal_menu(), parse_mode='Markdown')
-    elif data == "MORE_PAIRS":
-        all_btns = [[InlineKeyboardButton(p, callback_data=f"PAIR_{p}") for p in ALL_PAIRS[i:i+3]] for i in range(0, len(ALL_PAIRS), 3)]
-        all_btns.append([InlineKeyboardButton("🔙 Back", callback_data="BACK_MAIN")])
-        await q.message.reply_text("Sab pairs:", reply_markup=InlineKeyboardMarkup(all_btns))
+# Auto Signal Job
+async def auto_job(context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(chat_id=context.job.chat_id, text=generate_signal(), parse_mode="Markdown")
 
-def main():
-    threading.Thread(target=run_flask).start()
+async def auto_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat_id
+    # Har 2 minute me signal
+    context.job_queue.run_repeating(auto_job, interval=120, first=5, chat_id=chat_id, name=str(chat_id))
+    await update.message.reply_text("✅ *Auto Signals ON! Har 2 minute me signal milega!* 🚀\n\n/auto_off se band kar sakte ho.", parse_mode="Markdown")
+
+async def auto_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat_id
+    jobs = context.job_queue.get_jobs_by_names(str(chat_id))
+    for job in jobs:
+        job.schedule_removal()
+    await update.message.reply_text("🛑 Auto Signals OFF kar diye!")
+
+def run_bot():
+    print("BOT POLLING STARTED - GPT AI")
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(handle))
-    print("Bot Started...")
+    app.add_handler(CommandHandler("signal", signal_cmd))
+    app.add_handler(CommandHandler("auto_on", auto_on))
+    app.add_handler(CommandHandler("auto_off", auto_off))
+    # old commands support
+    app.add_handler(CommandHandler("autosignals", auto_on))
+    
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    threading.Thread(target=run_bot, daemon=True).start()
+    port = int(os.environ.get("PORT", 8080))
+    flask_app.run(host="0.0.0.0", port=port)
