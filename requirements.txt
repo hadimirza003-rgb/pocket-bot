@@ -1,6 +1,5 @@
-pyTelegramBotAPI
+pyTelegramBotAPI==4.14.0
+Flask
 yfinance
-pandas
-flask
-requests
 pytz
+pandas
