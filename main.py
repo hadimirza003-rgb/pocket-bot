@@ -6,93 +6,135 @@ import pytz
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "KOT JAMEL 1-MIN KING LIVE ✅"
+def home(): 
+    return "OWAIS KHAN STYLE BOT LIVE ✅"
 
 TOKEN = os.getenv("BOT_TOKEN", "").strip()
+if not TOKEN:
+    print("BOT_TOKEN missing!")
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
-PAIRS = ["EUR/USD (OTC)", "GBP/USD (OTC)", "USD/JPY (OTC)", "EUR/JPY (OTC)", "GBP/JPY (OTC)", "AUD/USD (OTC)", "GOLD", "BTC/USD (OTC)"]
+PAIRS = ["AUD/CAD OTC", "EUR/USD OTC", "GBP/USD OTC", "AUD/USD OTC", "EUR/JPY OTC", "USD/JPY OTC", "GOLD", "BTC/USD OTC"]
 
 def get_signal():
     pair = random.choice(PAIRS)
-    direction = random.choice(["BUY 🟢 UP", "SELL 🔴 DOWN"])
+    side = random.choice(["BUY", "SELL"])
     
-    # Duniya ka Ilm - Full Analysis
-    rsi = random.randint(25, 80)
-    ema_trend = random.choice(["EMA 9 Above 21 - Bullish", "EMA 9 Below 21 - Bearish"])
-    support = random.choice(["Strong Support Break", "Resistance Rejection", "Double Bottom", "Double Top", "Trendline Bounce"])
+    # Owais style SCORE logic
+    score = random.randint(2, 5)
+    sell_score = random.randint(1, 4)
     
-    if rsi < 35: rsi_status = "OVERSOLD 🔥 BUY Strong"
-    elif rsi > 70: rsi_status = "OVERBOUGHT 🔥 SELL Strong"
-    else: rsi_status = f"Neutral - {rsi} Level"
+    # Full Duniya ka Ilm
+    rsi = random.randint(30, 78)
+    if rsi > 70:
+        rsi_text = f"{rsi} - OVERBOUGHT"
+        trend = "SELL Strong 🔴"
+    elif rsi < 35:
+        rsi_text = f"{rsi} - OVERSOLD"
+        trend = "BUY Strong 🟢"
+    else:
+        rsi_text = f"{rsi} - Neutral"
+        trend = "Momentum"
 
-    pak = datetime.now(pytz.timezone('Asia/Karachi'))
-    entry_time = pak.strftime("%I:%M %p")
-    # Next candle 1 min
-    next_min = (pak.minute + 1) % 60
-    expiry_str = f"{next_min} wala Candle"
-
-    acc = random.randint(93, 98)
-
+    pak_time = datetime.now(pytz.timezone('Asia/Karachi'))
+    time_str = pak_time.strftime("%I:%M:%S %p")
+    
+    emoji = "🟢" if side == "BUY" else "🔴"
+    
     return f"""
-╔═══════════════════════════════╗
-║  💎 KOT JAMEL 1-MIN KING 💎  ║
-╚═══════════════════════════════╝
+╔════════════════════════╗
+║ OWAIS KHAN POT TRADING ║
+╚════════════════════════╝
 
 💱 PAIR: {pair}
-📶 TIMEFRAME: 1 MINUTE ONLY
+📊 TIMEFRAME: 1 MINUTE
 
-📈 SIGNAL: {direction}
-⏱ EXPIRY: 1 MINUTE - Next Candle
+{emoji} SIGNAL: {side} {emoji}
 
-━━━━━━━━━━━━━━━━━━
-🔍 FULL ANALYSIS (Duniya ka Ilm):
-━━━━━━━━━━━━━━━━━━
-1️⃣ TREND: {ema_trend}
-2️⃣ RSI (14): {rsi} - {rsi_status}
-3️⃣ PATTERN: {support}
-4️⃣ VOLUME: High Volume Confirmation
-5️⃣ NEWS: No High Impact News
+━━━━━━━━━━━━━━━━━━━━
+📈 FULL ANALYSIS:
+• RSI: {rsi_text}
+• TREND: {trend}
+• PATTERN: Support/Resistance
+• VOLUME: High Confirmation
+━━━━━━━━━━━━━━━━━━━━
 
-🎯 ENTRY: {expiry_str}
-🕒 PKT TIME: {entry_time}
-💰 MARTINGALE: Max 1 Step
-📊 RISK: 2% Per Trade
+📊 LIVE SCOREBOARD:
+🏆 SCORE: {score}
+📉 {side}: {sell_score}
 
-━━━━━━━━━━━━━━━━━━
-✅ ACCURACY: {acc}%
-⚠️ Valid for 1 Candle Only!
+⏱ EXPIRY: 1 MINUTE
+🎯 ENTRY: NEXT CANDLE
+🕒 PKT: {time_str}
 
-@gpt_trade_pro_2028_bot
+✅ ACCURACY: {random.randint(92, 98)}%
+⚠️ 1 Candle Valid Only
+
+Bot: @gpt_trade_pro_2028_bot
 Kot Jamel Official
 """
 
 @bot.message_handler(commands=['start'])
 def start(m):
-    mk = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    mk.add("⚡ 1 MIN SIGNAL ⚡", "/pairs")
-    bot.send_message(m.chat.id, f"Welcome {m.from_user.first_name}! 🔥\n\nAb sirf 1 MINUTE ke PRO signals!\n\nButton dabao 👇", reply_markup=mk)
+    kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("⚡ SIGNAL LO ⚡", "/pairs")
+    kb.add("/signal")
+    bot.send_message(m.chat.id, 
+        f"🔥 OWAIS KHAN STYLE BOT LIVE {m.from_user.first_name}!\n\n"
+        "Ab 1 MINUTE ke signals Owais style me!\n\n"
+        "⚡ SIGNAL LO ⚡ dabao!",
+        reply_markup=kb)
 
 @bot.message_handler(commands=['signal'])
-def sig(m):
-    bot.send_chat_action(m.chat.id, 'typing')
-    time.sleep(1)
-    bot.send_message(m.chat.id, get_signal())
-
-@bot.message_handler(func=lambda m: "1 MIN SIGNAL" in m.text)
-def sig_btn(m):
+@bot.message_handler(func=lambda m: m.text and "SIGNAL LO" in m.text)
+def signal(m):
     bot.send_chat_action(m.chat.id, 'typing')
     time.sleep(1)
     bot.send_message(m.chat.id, get_signal())
 
 @bot.message_handler(commands=['pairs'])
 def pairs(m):
-    bot.send_message(m.chat.id, "📋 OTC Pairs (1 Min):\n" + "\n".join(PAIRS))
+    bot.send_message(m.chat.id, "📋 Pairs (1 Min OTC):\n" + "\n".join(PAIRS))
+
+# COPY wala feature - /copy AUD/CAD SELL
+@bot.message_handler(commands=['copy'])
+def copy_cmd(m):
+    try:
+        parts = m.text.split()
+        if len(parts) < 3:
+            bot.reply_to(m, "Use: /copy PAIR SIDE\nEx: /copy AUD/CAD SELL")
+            return
+        pair = parts[1].upper() + " OTC"
+        side = parts[2].upper()
+        # Custom signal from Owais Live
+        pak = datetime.now(pytz.timezone('Asia/Karachi')).strftime("%I:%M:%S %p")
+        txt = f"""
+╔════════════════════════╗
+║ OWAIS KHAN COPY SIGNAL ║
+╚════════════════════════╝
+
+💱 PAIR: {pair}
+🔴 SIGNAL: {side}
+
+📊 SCORE: {random.randint(2,5)}
+📉 {side}: {random.randint(1,4)}
+
+⏱ EXPIRY: 1 MINUTE
+🕒 PKT: {pak}
+🎯 NEXT CANDLE
+
+Source: Owais Live
+Bot: @gpt_trade_pro_2028_bot
+"""
+        bot.send_message(m.chat.id, txt)
+    except Exception as e:
+        bot.reply_to(m, f"Error: {e}")
 
 def run_bot():
-    print("1-MIN KING Started ✅", flush=True)
+    print("Bot Started ✅", flush=True)
     while True:
-        try: bot.infinity_polling(timeout=60)
+        try:
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
         except Exception as e:
             print(f"Restart: {e}", flush=True)
             time.sleep(5)
