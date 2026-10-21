@@ -3,3 +3,4 @@ Flask
 yfinance
 pytz
 pandas
+ta
