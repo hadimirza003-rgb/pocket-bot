@@ -1,51 +1,88 @@
+import os, time, threading, pytz, yfinance as yf, telebot
+from flask import Flask
+from datetime import datetime
+import pandas as pd
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
+app = Flask(__name__)
+
+PAIRS = {"EUR/USD":"EURUSD=X", "GBP/USD":"GBPUSD=X", "USD/JPY":"JPY=X", "GOLD":"GC=F"}
+
 def get_level(sym):
     try:
-        # 5m aur 15m dono ka data
-        df5 = yf.download(sym, period="1d", interval="5m", progress=False, auto_adjust=True)
-        df15 = yf.download(sym, period="1d", interval="15m", progress=False, auto_adjust=True)
-        if len(df5) < 50 or len(df15) < 50: return None
-        
-        for df in [df5, df15]:
-            df['EMA20'] = df['Close'].ewm(span=20).mean()
-            df['EMA50'] = df['Close'].ewm(span=50).mean()
-            delta = df['Close'].diff()
-            gain = (delta.where(delta>0,0)).rolling(14).mean()
-            loss = (-delta.where(delta<0,0)).rolling(14).mean()
-            df['RSI'] = 100 - (100/(1+gain/loss))
-        
-        p5 = float(df5['Close'].iloc[-1])
-        rsi5 = float(df5['RSI'].iloc[-1])
-        ema20_5 = float(df5['EMA20'].iloc[-1])
-        ema50_5 = float(df5['EMA50'].iloc[-1])
-        
-        p15 = float(df15['Close'].iloc[-1])
-        rsi15 = float(df15['RSI'].iloc[-1])
-
-        low = float(df5['Low'][-20:].min())
-        high = float(df5['High'][-20:].max())
-        
-        # --- PRO FILTER ---
-        # Choppy market avoid
-        if abs(ema20_5 - ema50_5) / p5 < 0.0008: # trend nahi hai
+        df = yf.download(sym, period="1d", interval="5m", progress=False, auto_adjust=True)
+        if len(df) < 30:
             return None
-
-        # BUY CONDITION - Strong
-        if p5 <= low*1.0015 and rsi5 < 35 and rsi15 < 45 and p5 > ema20_5 and ema20_5 > ema50_5:
-            return f"BUY ✅ Level: {low:.5f} | RSI 5M:{rsi5:.0f} 15M:{rsi15:.0f} | TREND UP"
-
-        # SELL CONDITION - Strong  
-        if p5 >= high*0.9985 and rsi5 > 65 and rsi15 > 55 and p5 < ema20_5 and ema20_5 < ema50_5:
-            return f"SELL ✅ Level: {high:.5f} | RSI 5M:{rsi5:.0f} 15M:{rsi15:.0f} | TREND DOWN"
-
+        
+        close = df['Close']
+        # Safe RSI
+        delta = close.diff()
+        gain = delta.where(delta > 0, 0).rolling(window=14).mean()
+        loss = -delta.where(delta < 0, 0).rolling(window=14).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        
+        ema20 = close.ewm(span=20).mean()
+        
+        price = float(close.iloc[-1])
+        rsi_val = float(rsi.iloc[-1])
+        ema_val = float(ema20.iloc[-1])
+        
+        low_20 = float(df['Low'][-20:].min())
+        high_20 = float(df['High'][-20:].max())
+        
+        # Simple but strong
+        if price <= low_20*1.002 and rsi_val < 40 and price > ema_val:
+            return f"BUY LEVEL {low_20:.5f} | RSI {rsi_val:.0f}"
+        if price >= high_20*0.998 and rsi_val > 60 and price < ema_val:
+            return f"SELL LEVEL {high_20:.5f} | RSI {rsi_val:.0f}"
         return None
     except Exception as e:
         print(f"Error {sym}: {e}")
         return None
-        PAIRS = {
-    "EUR/USD":"EURUSD=X", 
-    "GBP/USD":"GBPUSD=X", 
-    "USD/JPY":"JPY=X",
-    "GOLD":"GC=F",
-    "GBP/JPY":"GBPJPY=X",
-    "EUR/JPY":"EURJPY=X"
-}
+
+@bot.message_handler(commands=['start'])
+def start(m):
+    bot.reply_to(m, "✅ Kot Jamel Bot ONLINE\n/signal bhejo")
+
+@bot.message_handler(commands=['signal'])
+def sig(m):
+    bot.send_message(m.chat.id, "REAL SCAN...")
+    pkt = pytz.timezone('Asia/Karachi')
+    now = datetime.now(pkt)
+    found=False
+    for n,s in PAIRS.items():
+        r=get_level(s)
+        if r:
+            bot.send_message(m.chat.id, f"{n} - {r}\n⏰ 15M Expiry\n{now.strftime('%I:%M %p')}")
+            found=True
+    if not found:
+        bot.send_message(m.chat.id, "No Level - 30 min baad try karo")
+
+@bot.message_handler(commands=['pairs'])
+def pairs(m):
+    bot.reply_to(m, "Pairs: EUR/USD, GBP/USD, USD/JPY, GOLD")
+
+def run_bot():
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+        time.sleep(2)
+    except: pass
+    while True:
+        try:
+            print("Polling started...")
+            bot.infinity_polling(skip_pending=True, timeout=30)
+        except Exception as e:
+            print(f"Restart: {e}")
+            time.sleep(5)
+
+@app.route('/')
+def home():
+    return "Bot Running - Kot Jamel Official"
+
+threading.Thread(target=run_bot, daemon=True).start()
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
