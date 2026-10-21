@@ -5,26 +5,30 @@ import threading
 app = Flask(__name__)
 @app.route('/')
 def home():
-    return "Bot Live!"
+    return "Bot is Live!"
 
 def run_bot():
     try:
         import telebot
-        raw = os.getenv("BOT_TOKEN","")
-        TOKEN = raw.strip()  # <-- ye space khud kaat dega
-        print(f"Raw token len: {len(raw)}, Stripped len: {len(TOKEN)}")
+        # ye line space ko khud kaat degi
+        TOKEN = os.getenv("BOT_TOKEN", "").strip().replace(" ", "").replace("\n", "")
+        print(f"Token check length: {len(TOKEN)}", flush=True)
         if not TOKEN:
-            print("BOT_TOKEN missing!")
+            print("ERROR: BOT_TOKEN missing!", flush=True)
             return
         bot = telebot.TeleBot(TOKEN)
+        
         @bot.message_handler(commands=['start'])
         def start(m):
             bot.reply_to(m, "Bot Live Aqeel! ✅")
-        print("Bot Polling Started ✅")
+        
+        print("Bot Polling Started ✅", flush=True)
         bot.infinity_polling()
     except Exception as e:
-        print(f"BOT CRASH: {e}")
+        print(f"BOT CRASH: {e}", flush=True)
 
 threading.Thread(target=run_bot, daemon=True).start()
+
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT",10000)))
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
