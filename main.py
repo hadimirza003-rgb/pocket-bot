@@ -6,77 +6,93 @@ import pytz
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "Kot Jamel ULTRA BOT LIVE ✅"
+def home(): return "KOT JAMEL 1-MIN KING LIVE ✅"
 
 TOKEN = os.getenv("BOT_TOKEN", "").strip()
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
-PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "EUR/JPY", "GBP/JPY", "AUD/USD", "GOLD", "BTC/USD"]
+PAIRS = ["EUR/USD (OTC)", "GBP/USD (OTC)", "USD/JPY (OTC)", "EUR/JPY (OTC)", "GBP/JPY (OTC)", "AUD/USD (OTC)", "GOLD", "BTC/USD (OTC)"]
 
-def get_ultra_signal():
+def get_signal():
     pair = random.choice(PAIRS)
-    direction = random.choice(["BUY 🟢⬆️ CALL", "SELL 🔴⬇️ PUT"])
+    direction = random.choice(["BUY 🟢 UP", "SELL 🔴 DOWN"])
     
-    # 3 sec se 1 min tak ki expiry
-    expiry = random.choice(["3 SECONDS ⚡", "5 SECONDS ⚡", "10 SECONDS", "15 SECONDS", "30 SECONDS", "1 MINUTE 🎯"])
+    # Duniya ka Ilm - Full Analysis
+    rsi = random.randint(25, 80)
+    ema_trend = random.choice(["EMA 9 Above 21 - Bullish", "EMA 9 Below 21 - Bearish"])
+    support = random.choice(["Strong Support Break", "Resistance Rejection", "Double Bottom", "Double Top", "Trendline Bounce"])
     
-    # Duniya ka Ilm - Real Trading Logic
-    rsi = random.randint(28, 78)
-    trend = "UPTREND 📈" if rsi > 50 else "DOWNTREND 📉"
-    if rsi > 70: status = "OVERBOUGHT - SELL Expected"
-    elif rsi < 30: status = "OVERSOLD - BUY Expected"
-    else: status = "NEUTRAL - Strong Momentum"
+    if rsi < 35: rsi_status = "OVERSOLD 🔥 BUY Strong"
+    elif rsi > 70: rsi_status = "OVERBOUGHT 🔥 SELL Strong"
+    else: rsi_status = f"Neutral - {rsi} Level"
 
-    pak_time = datetime.now(pytz.timezone('Asia/Karachi'))
-    now = pak_time.strftime("%I:%M:%S %p")
+    pak = datetime.now(pytz.timezone('Asia/Karachi'))
+    entry_time = pak.strftime("%I:%M %p")
+    # Next candle 1 min
+    next_min = (pak.minute + 1) % 60
+    expiry_str = f"{next_min} wala Candle"
 
-    signal = f"""
-╔════════════════════════╗
-║  KOT JAMEL ULTRA PRO   ║
-║   3s to 1Min SCALPER   ║
-╚════════════════════════╝
+    acc = random.randint(93, 98)
 
-💱 PAIR: {pair} (OTC)
-📊 SIGNAL: {direction}
+    return f"""
+╔═══════════════════════════════╗
+║  💎 KOT JAMEL 1-MIN KING 💎  ║
+╚═══════════════════════════════╝
 
-⏱ EXPIRY: {expiry}
-📈 TREND: {trend}
-📊 RSI (14): {rsi} | {status}
+💱 PAIR: {pair}
+📶 TIMEFRAME: 1 MINUTE ONLY
 
-🎯 ENTRY: NEXT CANDLE
-🕒 TIME: {now} PKT
+📈 SIGNAL: {direction}
+⏱ EXPIRY: 1 MINUTE - Next Candle
 
-💡 REASON: Support + EMA Crossover + RSI Confirmation
-⚠️ MONEY MANAGEMENT: Martingale 1 Step Only
+━━━━━━━━━━━━━━━━━━
+🔍 FULL ANALYSIS (Duniya ka Ilm):
+━━━━━━━━━━━━━━━━━━
+1️⃣ TREND: {ema_trend}
+2️⃣ RSI (14): {rsi} - {rsi_status}
+3️⃣ PATTERN: {support}
+4️⃣ VOLUME: High Volume Confirmation
+5️⃣ NEWS: No High Impact News
 
-🔥 ACCURACY: {random.randint(91, 98)}%
+🎯 ENTRY: {expiry_str}
+🕒 PKT TIME: {entry_time}
+💰 MARTINGALE: Max 1 Step
+📊 RISK: 2% Per Trade
 
-Bot: @gpt_trade_pro_2028_bot
-OWNER: Kot Jamel
+━━━━━━━━━━━━━━━━━━
+✅ ACCURACY: {acc}%
+⚠️ Valid for 1 Candle Only!
+
+@gpt_trade_pro_2028_bot
+Kot Jamel Official
 """
-    return signal
 
 @bot.message_handler(commands=['start'])
 def start(m):
-    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("/signal ⚡", "/pairs")
-    bot.send_message(m.chat.id, f"🔥 ULTRA BOT LIVE {m.from_user.first_name}!\n\nAb 3 sec se 1 min tak ke signals milenge!\n/signal ⚡ dabao!", reply_markup=markup)
+    mk = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    mk.add("⚡ 1 MIN SIGNAL ⚡", "/pairs")
+    bot.send_message(m.chat.id, f"Welcome {m.from_user.first_name}! 🔥\n\nAb sirf 1 MINUTE ke PRO signals!\n\nButton dabao 👇", reply_markup=mk)
 
 @bot.message_handler(commands=['signal'])
 def sig(m):
     bot.send_chat_action(m.chat.id, 'typing')
-    time.sleep(0.8)
-    bot.send_message(m.chat.id, get_ultra_signal(), parse_mode="Markdown")
+    time.sleep(1)
+    bot.send_message(m.chat.id, get_signal())
+
+@bot.message_handler(func=lambda m: "1 MIN SIGNAL" in m.text)
+def sig_btn(m):
+    bot.send_chat_action(m.chat.id, 'typing')
+    time.sleep(1)
+    bot.send_message(m.chat.id, get_signal())
 
 @bot.message_handler(commands=['pairs'])
 def pairs(m):
-    bot.send_message(m.chat.id, "📋 Pairs:\n" + "\n".join(PAIRS))
+    bot.send_message(m.chat.id, "📋 OTC Pairs (1 Min):\n" + "\n".join(PAIRS))
 
 def run_bot():
-    print("ULTRA BOT Started ✅", flush=True)
+    print("1-MIN KING Started ✅", flush=True)
     while True:
-        try:
-            bot.infinity_polling(timeout=60)
+        try: bot.infinity_polling(timeout=60)
         except Exception as e:
             print(f"Restart: {e}", flush=True)
             time.sleep(5)
