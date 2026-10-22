@@ -1,6 +1,3 @@
-pyTelegramBotAPI==4.14.0
-Flask
+flask
 yfinance
-pytz
 pandas
-ta
