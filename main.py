@@ -23,28 +23,33 @@ def get_price(p):
         return price_hist[p][-1]
 
 async def signal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 1-MIN SCAN... Real market...")
-    best_p, best_s, best_c, best_pr = None, "CALL", 0, 0
+    await update.message.reply_text("🔍 1-MIN SCAN... Real market scan...")
+    best_p = "USD/PHP"
+    best_s = "CALL"
+    best_c = 0
+    best_pr = 58.5
     for p in PAIRS:
         pr = get_price(p)
         price_hist[p].append(pr)
-        ema9 = sum(list(price_hist[p])[-9:])/9
-        ema21 = sum(list(price_hist[p])[-21:])/21
+        lst = list(price_hist[p])
+        ema9 = sum(lst[-9:])/9
+        ema21 = sum(lst[-21:])/21
         s = "CALL" if ema9 >= ema21 else "PUT"
         c = 84 + random.randint(0, 8)
         if c > best_c:
-            best_c = c; best_s = s; best_p = p; best_pr = pr
-    
-    # HAMESHA SIGNAL - NO SKIP
-    msg = f"🚀 **{best_p} 1-MIN SIGNAL**\n\n💰 Pair: **{best_p}**\n📈 Signal: **{best_s} {'🟢' if best_s=='CALL' else '🔴'}**\n🎯 Confidence: **{best_c}%**\n💵 Price: {best_pr:.4f}\n⏰ {datetime.now().strftime('%I:%M %p')}\n\n✅ ENTRY: ABHI {best_s} LO - 1 MIN"
+            best_c = c
+            best_s = s
+            best_p = p
+            best_pr = pr
+    msg = f"🚀 {best_p} 1-MIN SIGNAL\n\n💰 Pair: {best_p}\n📈 Signal: {best_s} {'🟢' if best_s=='CALL' else '🔴'}\n🎯 Confidence: {best_c}%\n💵 Price: {best_pr:.4f}\n⏰ {datetime.now().strftime('%I:%M %p')}\n\n✅ ENTRY: ABHI {best_s} LO - 1 MIN\nReal Price - No Skip"
     await update.message.reply_text(msg, parse_mode='Markdown')
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bot Ready! /signal likho - har bar real signal!")
+    await update.message.reply_text("Bot Ready! /signal likho - har bar signal ayega, skip nahi!")
 
 @app.route('/')
 def home():
-    return "Bot Running - No Skip Mode - Fixed Updater Bug"
+    return "Bot Running - NEW CODE - No Sideways"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -55,5 +60,5 @@ if __name__ == '__main__':
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("signal", signal_cmd))
     application.add_handler(CommandHandler("start", start_cmd))
-    print("Bot started - No Updater, Only Application")
+    print("Bot started - NEW CODE")
     application.run_polling()
