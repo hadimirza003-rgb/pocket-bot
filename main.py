@@ -1,5 +1,8 @@
+import os
 import time
 import telebot
+from threading import Thread
+from flask import Flask
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -16,8 +19,29 @@ CHAT_ID = "YAHAN_APNA_CHAT_ID_DALEIN"
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 driver = None
 
+# ==========================================
+# 2. RENDER PORT ERROR FIX (FLASK SERVER)
+# ==========================================
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Pocket Option Bot is running smoothly!"
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+# Web server ko background thread me chalana taaki bot block na ho
+server_thread = Thread(target=run_web_server)
+server_thread.daemon = True
+server_thread.start()
+
+
+# ==========================================
+# 3. BROWSER AUTOMATION FUNCTIONS
+# ==========================================
 def start_browser():
-    """Browser open karne aur Pocket Option load karne ka function"""
     global driver
     options = Options()
     options.add_argument("--start-maximized")
@@ -27,8 +51,9 @@ def start_browser():
     driver.get("https://pocketoption.com/")
     return driver
 
+
 # ==========================================
-# 2. TELEGRAM COMMANDS (IPHONE SE CONTROL)
+# 4. TELEGRAM COMMANDS (IPHONE SE CONTROL)
 # ==========================================
 
 @bot.message_handler(commands=['start'])
@@ -45,7 +70,7 @@ def handle_start(message):
 
 @bot.message_handler(commands=['open_site'])
 def handle_open(message):
-    bot.reply_to(message, "⏳ Pocket Option site open ho rahi hai... Computer me Login kar ke Demo Account select karein.")
+    bot.reply_to(message, "⏳ Pocket Option site open ho rahi hai... Login kar ke Demo Account select karein.")
     try:
         start_browser()
         bot.send_message(message.chat.id, "✅ Site open ho gayi! Ab aap phone se /call ya /put bhej kar trade laga sakte hain.")
@@ -94,5 +119,5 @@ def handle_stop(message):
 
 # Bot Listener Start
 if __name__ == "__main__":
-    print("Bot is running... Control it from Telegram!")
+    print("Bot & Web Server running... Control it from Telegram!")
     bot.polling(none_stop=True)
