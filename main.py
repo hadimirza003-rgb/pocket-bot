@@ -1,124 +1,59 @@
-# pocket-bot - FINAL for PocketOption Manual Trading
-import time
-import threading
-import yfinance as yf
-import pandas as pd
-import ta
-from flask import Flask, jsonify
+import time,threading,yfinance as yf,pandas as pd,ta
+from flask import Flask,jsonify
 from datetime import datetime
-
-app = Flask(__name__)
-
-PAIRS = {
-    "EUR/USD": "EURUSD=X",
-    "GBP/USD": "GBPUSD=X", 
-    "USD/JPY": "USDJPY=X",
-    "GBP/JPY": "GBPJPY=X",
-    "AUD/USD": "AUDUSD=X",
-    "EUR/JPY": "EURJPY=X",
-    "USD/CHF": "USDCHF=X",
-    "EUR/GBP": "EURGBP=X"
-}
-
-last_signals = {}
-
-def get_data(symbol):
-    try:
-        df = yf.download(symbol, period="2d", interval="1m", progress=False)
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        return df.dropna()
-    except:
-        return pd.DataFrame()
-
-def advanced_filter(df):
-    if len(df) < 100:
-        return None, "Data kam hai", 0
-    close = df['Close']
-    high = df['High']
-    low = df['Low']
-    
-    rsi = ta.momentum.RSIIndicator(close, 14).rsi()
-    ema9 = ta.trend.EMAIndicator(close, 9).ema_indicator()
-    ema21 = ta.trend.EMAIndicator(close, 21).ema_indicator()
-    macd_diff = ta.trend.MACD(close).macd_diff()
-    bb = ta.volatility.BollingerBands(close, 20, 2)
-    bb_h = bb.bollinger_hband()
-    bb_l = bb.bollinger_lband()
-    atr = ta.volatility.AverageTrueRange(high, low, close, 14).average_true_range()
-
-    last_close = close.iloc[-1]
-    last_rsi = rsi.iloc[-1]
-    last_ema9 = ema9.iloc[-1]
-    last_ema21 = ema21.iloc[-1]
-    last_macd = macd_diff.iloc[-1]
-    last_bb_h = bb_h.iloc[-1]
-    last_bb_l = bb_l.iloc[-1]
-    last_atr = atr.iloc[-1]
-
-    if last_atr < 0.0003:
-        return None, f"Slow Market", int(last_rsi)
-    if abs(last_ema9 - last_ema21) < 0.0001:
-        return None, "Sideways", int(last_rsi)
-
-    call_score = 0
-    if last_rsi < 32: call_score += 1
-    if last_ema9 > last_ema21: call_score += 1
-    if last_macd > 0: call_score += 1
-    if last_close <= last_bb_l * 1.0005: call_score += 1
-    if close.iloc[-2] < ema9.iloc[-2] and last_close > last_ema9: call_score += 1
-
-    put_score = 0
-    if last_rsi > 68: put_score += 1
-    if last_ema9 < last_ema21: put_score += 1
-    if last_macd < 0: put_score += 1
-    if last_close >= last_bb_h * 0.9995: put_score += 1
-    if close.iloc[-2] > ema9.iloc[-2] and last_close < last_ema9: put_score += 1
-
-    if call_score >= 4:
-        return f"STRONG CALL", f"Score {call_score}/5 RSI {last_rsi:.1f}", int(last_rsi)
-    if put_score >= 4:
-        return f"STRONG PUT", f"Score {put_score}/5 RSI {last_rsi:.1f}", int(last_rsi)
-
-    return None, f"RSI {last_rsi:.1f} C:{call_score} P:{put_score}", int(last_rsi)
-
-def scan_market():
-    global last_signals
-    temp = {}
-    for name, symbol in PAIRS.items():
-        df = get_data(symbol)
-        if df.empty:
-            temp[name] = {"signal": "No Data", "reason": "-", "rsi": 0, "time": datetime.now().strftime('%H:%M:%S')}
-            continue
-        signal, reason, rsi = advanced_filter(df)
-        temp[name] = {"signal": signal if signal else "WAIT", "reason": reason, "rsi": rsi, "time": datetime.now().strftime('%H:%M:%S')}
-    last_signals = temp
-
-def scan_loop():
-    while True:
-        try:
-            scan_market()
-        except:
-            pass
-        time.sleep(90)
-
+app=Flask(__name__)
+PAIRS={"EUR/USD":"EURUSD=X","GBP/USD":"GBPUSD=X","USD/JPY":"USDJPY=X","GBP/JPY":"GBPJPY=X","AUD/USD":"AUDUSD=X","EUR/JPY":"EURJPY=X","USD/CHF":"USDCHF=X","EUR/GBP":"EURGBP=X"}
+last_signals={}
+def get_data(s,i="1m",p="2d"):
+ try:
+  df=yf.download(s,period=p,interval=i,progress=False)
+  if isinstance(df.columns,pd.MultiIndex):df.columns=df.columns.get_level_values(0)
+  return df.dropna()
+ except:return pd.DataFrame()
+def filt(df1,df5):
+ if len(df1)<100 or len(df5)<50:return None,"Data kam",0
+ c=df1['Close'];h=df1['High'];l=df1['Low']
+ r=ta.momentum.RSIIndicator(c,14).rsi();e9=ta.trend.EMAIndicator(c,9).ema_indicator();e21=ta.trend.EMAIndicator(c,21).ema_indicator();e50=ta.trend.EMAIndicator(c,50).ema_indicator();m=ta.trend.MACD(c);md=m.macd_diff();ml=m.macd();bb=ta.volatility.BollingerBands(c,20,2);bbh=bb.bollinger_hband();bbl=bb.bollinger_lband();atr=ta.volatility.AverageTrueRange(h,l,c,14).average_true_range();st=ta.momentum.StochasticOscillator(h,l,c).stoch()
+ lc=c.iloc[-1];lr=r.iloc[-1];le9=e9.iloc[-1];le21=e21.iloc[-1];le50=e50.iloc[-1];lmd=md.iloc[-1];lml=ml.iloc[-1];lbh=bbh.iloc[-1];lbl=bbl.iloc[-1];la=atr.iloc[-1];ls=st.iloc[-1];pc=c.iloc[-2];pe9=e9.iloc[-2]
+ c5=df5['Close'];e9_5=ta.trend.EMAIndicator(c5,9).ema_indicator();e21_5=ta.trend.EMAIndicator(c5,21).ema_indicator();up=e9_5.iloc[-1]>e21_5.iloc[-1];down=e9_5.iloc[-1]<e21_5.iloc[-1]
+ if la<0.00035:return None,f"Slow {la:.5f}",int(lr)
+ if abs(le9-le21)<0.00012:return None,"Sideways",int(lr)
+ if abs(lc-le50)>la*5:return None,"Far EMA50",int(lr)
+ cs=0;ps=0
+ if lr<28:cs+=1
+ if lr>72:ps+=1
+ if le9>le21 and lc>le21:cs+=1
+ if le9<le21 and lc<le21:ps+=1
+ if lmd>0 and lml>0:cs+=1
+ if lmd<0 and lml<0:ps+=1
+ if lc<=lbl*1.001 and ls<20:cs+=1
+ if lc>=lbh*0.999 and ls>80:ps+=1
+ if pc<pe9 and lc>le9 and lc>le21:cs+=1
+ if pc>pe9 and lc<le9 and lc<le21:ps+=1
+ if up:cs+=1
+ if down:ps+=1
+ if cs>=5:return "STRONG CALL",f"{cs}/6 UP RSI{lr:.0f} STO{ls:.0f}",int(lr)
+ if ps>=5:return "STRONG PUT",f"{ps}/6 DOWN RSI{lr:.0f} STO{ls:.0f}",int(lr)
+ return None,f"WAIT R{lr:.0f} C:{cs} P:{ps} {'UP' if up else 'DOWN'}",int(lr)
+def scan():
+ global last_signals
+ tmp={}
+ for n,s in PAIRS.items():
+  d1=get_data(s,"1m","2d");d5=get_data(s,"5m","5d")
+  if d1.empty or d5.empty:tmp[n]={"signal":"No Data","reason":"-","rsi":0,"time":datetime.now().strftime('%H:%M:%S')};continue
+  sig,rea,rsi=filt(d1,d5);tmp[n]={"signal":sig if sig else "WAIT","reason":rea,"rsi":rsi,"time":datetime.now().strftime('%H:%M:%S')}
+ last_signals=tmp
+def loop():
+ while True:
+  try:scan()
+  except:pass
+  time.sleep(120)
 @app.route('/')
 def home():
-    html = "<html><head><title>Pocket Bot Live</title><meta http-equiv='refresh' content='60'>"
-    html += "<style>body{font-family:sans-serif;background:#111;color:#fff;padding:20px} .card{background:#222;padding:15px;margin:10px;border-radius:10px;display:inline-block;width:200px} .call{border-left:5px solid #00ff88} .put{border-left:5px solid #ff4444} .wait{border-left:5px solid #555} h1{color:#00ff88} a{color:#0af}</style></head><body>"
-    html += "<h1>Pocket-Bot-2 LIVE</h1>"
-    html += "<p>Use these signals MANUALLY on pocketoption - Do NOT auto-trade.</p>"
-    html += "<p>Auto refresh every 60 sec</p><div>"
-    for pair, data in last_signals.items():
-        cls = "call" if "CALL" in data['signal'] else "put" if "PUT" in data['signal'] else "wait"
-        emoji = "🟢" if "CALL" in data['signal'] else "🔴" if "PUT" in data['signal'] else "⏳"
-        html += f"<div class='card {cls}'><b>{pair}</b><br>{emoji} {data['signal']}<br><small>{data['reason']}</small></div>"
-    html += "</div></body></html>"
-    return html
-
+ h="<html><head><title>Super Strict</title><meta http-equiv='refresh' content='90'><style>body{font-family:sans-serif;background:#0a0a0a;color:#fff;padding:15px}.card{background:#1a1a1a;padding:12px;margin:8px;border-radius:10px;display:inline-block;width:200px}.call{border-left:6px solid #0f8}.put{border-left:6px solid #f34}.wait{border-left:4px solid #444}h1{color:#0f8;text-align:center}a{color:#0af}</style></head><body><h1>🔥 SUPER STRICT</h1><p style='text-align:center'>For m.pocketoption.com manual | 5/6 score | <a href='/signals'>JSON</a></p><div style='text-align:center'>"
+ for p,d in last_signals.items():
+  cl="call" if "CALL" in d['signal'] else "put" if "PUT" in d['signal'] else "wait";em="🟢💎" if "CALL" in d['signal'] else "🔴💎" if "PUT" in d['signal'] else "⏳";h+=f"<div class='card {cl}'><b>{p}</b><br><b>{em} {d['signal']}</b><br><small>{d['reason']}<br>{d['time']}</small></div>"
+ h+="</div></body></html>";return h
 @app.route('/signals')
-def signals():
-    return jsonify(last_signals)
-
-threading.Thread(target=scan_loop, daemon=True).start()
-threading.Thread(target=scan_market, daemon=True).start()
+def signals():return jsonify(last_signals)
+threading.Thread(target=loop,daemon=True).start();threading.Thread(target=scan,daemon=True).start()
