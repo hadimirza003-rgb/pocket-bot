@@ -1,47 +1,38 @@
-import os, requests, random, asyncio
+# Pocket Option Signal Scanner - by Aqeel
+# pip install yfinance pandas ta
+
+import time
+import pandas as pd
+import yfinance as yf
+import ta
 from datetime import datetime
-from collections import deque
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-PAIRS = ["USD/PHP","EUR/USD","GBP/USD","USD/JPY","AUD/USD","GOLD","BTC/USD"]
-price_hist = {p: deque([58.5]*60, maxlen=100) for p in PAIRS}
+PAIRS = ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "AUDUSD=X", "EURJPY=X", "GBPJPY=X"]
+TIMEFRAME = "1m"
+SCAN_INTERVAL = 60  # 60 second
 
-def get_price(p):
-    try:
-        b = p.split("/")[0]
-        if b == "GOLD":
-            return 2000 + random.uniform(-5,5)
-        r = requests.get(f"https://open.er-api.com/v6/latest/{b}", timeout=6).json()
-        return float(r['rates'].get(p.split("/")[1], 58.5))
-    except:
-        return price_hist[p][-1]
+def get_data(symbol):
+    df = yf.download(symbol, period="1d", interval="1m", progress=False)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    return df.dropna()
 
-async def signal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 1-MIN SCAN... Real market...")
-    best_p, best_s, best_c, best_pr = "EUR/USD", "CALL", 84, 1.08
-    for p in PAIRS:
-        pr = get_price(p)
-        price_hist[p].append(pr)
-        lst = list(price_hist[p])
-        ema9 = sum(lst[-9:])/9
-        ema21 = sum(lst[-21:])/21
-        s = "CALL" if ema9 >= ema21 else "PUT"
-        c = 84 + random.randint(0,8)
-        if c > best_c:
-            best_c, best_s, best_p, best_pr = c, s, p, pr
-    msg = f"🚀 {best_p} 1-MIN\n📈 {best_s} {'🟢' if best_s=='CALL' else '🔴'} {best_c}%\n💵 {best_pr:.4f}\n⏰ {datetime.now().strftime('%I:%M %p')}\n\n✅ ABHI {best_s} LO - 1 MIN"
-    await update.message.reply_text(msg, parse_mode='Markdown')
+def check_signal(df):
+    if len(df) < 50:
+        return None, ""
+    close = df['Close']
+    rsi = ta.momentum.RSIIndicator(close, 14).rsi().iloc[-1]
+    ema_fast = ta.trend.EMAIndicator(close, 9).ema_indicator().iloc[-1]
+    ema_slow = ta.trend.EMAIndicator(close, 21).ema_indicator().iloc[-1]
+    macd = ta.trend.MACD(close).macd_diff().iloc[-1]
+    price = close.iloc[-1]
+    bb_high = ta.volatility.BollingerBands(close).bollinger_hband().iloc[-1]
+    bb_low = ta.volatility.BollingerBands(close).bollinger_lband().iloc[-1]
 
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ Bot Ready! /signal likho")
-
-if __name__ == '__main__':
-    asyncio.set_event_loop(asyncio.new_event_loop())
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("signal", signal_cmd))
-    app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("pairs", start_cmd))
-    print("BOT STARTED - NO FLASK - PTB 22.3 - WORKER MODE")
-    app.run_polling(drop_pending_updates=True)
+    if rsi < 30 and ema_fast > ema_slow and macd > 0 and price <= bb_low:
+        return "CALL 🟢", f"RSI {rsi:.1f} Oversold + EMA Up"
+    elif rsi > 70 and ema_fast < ema_slow and macd < 0 and price >= bb_high:
+        return "PUT 🔴", f"RSI {rsi:.1f} Overbought + EMA Down"
+    elif rsi < 35 and ema_fast > ema_slow:
+        return "CALL Weak 🟡", f"RSI {rsi:.1f}"
+   
