@@ -1,4 +1,3 @@
-
 import os, random, datetime
 import telebot
 from threading import Thread
@@ -25,7 +24,13 @@ def run_telegram_bot():
     print("Telegram Bot polling started...")
     bot.infinity_polling()
 
-PAIRS = ["EUR/USD","GBP/USD","USD/JPY","EUR/JPY","AUD/USD","USD/CAD","GBP/JPY","EUR/GBP","BTC/USD","ETH/USD"]
+PAIRS = [
+    "EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","EUR/JPY OTC",
+    "AUD/USD OTC","USD/CAD OTC","GBP/JPY OTC","EUR/GBP OTC",
+    "EUR/AUD OTC","USD/CHF OTC","AUD/JPY OTC","NZD/USD OTC",
+    "EUR/CAD OTC","GBP/CAD OTC","BTC/USD OTC","ETH/USD OTC",
+    "EUR/USD","GBP/USD","USD/JPY"
+]
 
 def generate_signal():
     pair = random.choice(PAIRS)
