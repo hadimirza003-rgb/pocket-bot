@@ -1,176 +1,124 @@
-# main.py - Render ke liye FINAL - Web Server wala Bot
-# Ye Render pe 100% chalega, Tkinter nahi hai
-
-from flask import Flask, render_template_string, jsonify
-import requests
-import threading
+# pocket-bot - FINAL for PocketOption Manual Trading
 import time
-import random
+import threading
+import yfinance as yf
+import pandas as pd
+import ta
+from flask import Flask, jsonify
 from datetime import datetime
-from collections import deque
 
 app = Flask(__name__)
 
-# Global data
-price_history = deque(maxlen=100)
-time_history = deque(maxlen=100)
-current_signal = {"signal":"WAIT","conf":0,"price":58.5,"rsi":50,"reasons":[]}
-current_pair = "USD/PHP"
-
-# Seed initial
-for _ in range(50):
-    price_history.append(58.5 * (1 + (random.random()-0.5)*0.002))
-    time_history.append(datetime.now())
-
-def get_real_price():
-    try:
-        r = requests.get("https://open.er-api.com/v6/latest/USD", timeout=5)
-        data = r.json()
-        return data['rates']['PHP']
-    except:
-        return None
-
-def calc_rsi(prices, period=14):
-    if len(prices) < period+1:
-        return 50
-    gains, losses = 0, 0
-    for i in range(1, period+1):
-        diff = prices[-i] - prices[-i-1]
-        if diff > 0:
-            gains += diff
-        else:
-            losses -= diff
-    if losses == 0:
-        return 80
-    rs = gains / losses if losses!=0 else 10
-    return 100 - (100 / (1 + rs))
-
-def update_signal():
-    global current_signal
-    while True:
-        price = get_real_price()
-        if price:
-            price_history.append(price)
-            time_history.append(datetime.now())
-        else:
-            # fallback small move
-            price_history.append(price_history[-1] * (1 + (random.random()-0.5)*0.0003))
-        
-        prices = list(price_history)
-        if len(prices) >= 21:
-            rsi = calc_rsi(prices)
-            ema9 = sum(prices[-9:])/9
-            ema21 = sum(prices[-21:])/21
-            sma20 = sum(prices[-20:])/20
-            price_now = prices[-1]
-            
-            bull=bear=0
-            reasons=[]
-            if rsi < 45:
-                bull+=1; reasons.append(f"RSI {rsi:.1f} Oversold -> CALL")
-            elif rsi > 55:
-                bear+=1; reasons.append(f"RSI {rsi:.1f} Overbought -> PUT")
-            else:
-                reasons.append(f"RSI {rsi:.1f} Neutral")
-            
-            if ema9 > ema21:
-                bull+=1; reasons.append(f"EMA9 {ema9:.4f} > EMA21 {ema21:.4f}")
-            else:
-                bear+=1; reasons.append(f"EMA9 {ema9:.4f} < EMA21 {ema21:.4f}")
-            
-            if price_now > sma20:
-                bull+=1; reasons.append(f"Price > SMA20 Uptrend")
-            else:
-                bear+=1; reasons.append(f"Price < SMA20 Downtrend")
-            
-            if bull>=2:
-                signal="CALL"; conf=min(95,72+bull*7)
-            elif bear>=2:
-                signal="PUT"; conf=min(95,72+bear*7)
-            else:
-                signal="WAIT"; conf=55
-            
-            current_signal = {
-                "signal": signal,
-                "conf": conf,
-                "price": price_now,
-                "rsi": rsi,
-                "ema9": ema9,
-                "ema21": ema21,
-                "sma20": sma20,
-                "reasons": reasons,
-                "time": datetime.now().strftime("%H:%M:%S")
-            }
-        
-        time.sleep(4)
-
-# Start background thread
-threading.Thread(target=update_signal, daemon=True).start()
-
-HTML_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-<title>QUOTEX FINAL BOT - LIVE</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{background:#0a0a0a;color:white;font-family:Arial;margin:0;padding:10px}
-.card{background:#1e1e1e;border-radius:15px;padding:20px;margin:10px;text-align:center;border:2px solid #333}
-.CALL{background:#002a1a;border-color:#00ff88}
-.PUT{background:#2a0000;border-color:#ff4444}
-.price{font-size:28px;font-weight:bold}
-.signal{font-size:50px;font-weight:bold;margin:15px}
-.conf{font-size:18px;color:#aaa}
-.reasons{font-size:13px;color:#888;margin-top:10px;text-align:left}
-.log{background:#111;padding:10px;border-radius:10px;margin-top:15px;height:200px;overflow-y:auto;font-family:monospace;font-size:12px;color:#00ff88}
-.btn{background:#00ff88;color:black;padding:10px 20px;border:none;border-radius:8px;font-weight:bold;cursor:pointer;margin:5px}
-</style>
-</head>
-<body>
-<h2 style="color:#00ff88">QUOTEX FINAL BOT - ORIGINAL - RENDER LIVE</h2>
-<div id="card" class="card">
-<div id="price" class="price">Loading...</div>
-<div id="signal" class="signal">WAIT 🟡</div>
-<div id="conf" class="conf">Confidence: 0%</div>
-<div id="entry" style="font-size:20px;font-weight:bold;margin-top:10px">ENTRY: WAIT</div>
-<div id="reasons" class="reasons"></div>
-</div>
-<div class="log" id="log"></div>
-<script>
-async function fetchSignal(){
-  try{
-    let r = await fetch('/api/signal');
-    let d = await r.json();
-    document.getElementById('price').innerText = 'USD/PHP: ' + d.price.toFixed(4);
-    document.getElementById('signal').innerText = d.signal + (d.signal=='CALL'?' 🟢':d.signal=='PUT'?' 🔴':' 🟡');
-    document.getElementById('conf').innerText = 'Confidence: ' + d.conf.toFixed(0) + '% | RSI ' + d.rsi.toFixed(1);
-    document.getElementById('entry').innerText = d.signal=='WAIT' ? 'ENTRY: WAIT KARO' : 'ENTRY: ABHI ' + d.signal + ' LO - 1 MIN';
-    document.getElementById('entry').style.color = d.signal=='CALL' ? '#00ff88' : d.signal=='PUT' ? '#ff4444' : '#ffcc00';
-    document.getElementById('reasons').innerHTML = d.reasons.join('<br>');
-    let card=document.getElementById('card');
-    card.className='card ' + d.signal;
-    let log=document.getElementById('log');
-    log.innerHTML = '['+d.time+'] ' + d.price.toFixed(4) + ' => ' + d.signal + ' ' + d.conf.toFixed(0) + '%<br>' + log.innerHTML;
-  }catch(e){}
+PAIRS = {
+    "EUR/USD": "EURUSD=X",
+    "GBP/USD": "GBPUSD=X", 
+    "USD/JPY": "USDJPY=X",
+    "GBP/JPY": "GBPJPY=X",
+    "AUD/USD": "AUDUSD=X",
+    "EUR/JPY": "EURJPY=X",
+    "USD/CHF": "USDCHF=X",
+    "EUR/GBP": "EURGBP=X"
 }
-setInterval(fetchSignal, 4000);
-fetchSignal();
-</script>
-</body>
-</html>
-"""
+
+last_signals = {}
+
+def get_data(symbol):
+    try:
+        df = yf.download(symbol, period="2d", interval="1m", progress=False)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        return df.dropna()
+    except:
+        return pd.DataFrame()
+
+def advanced_filter(df):
+    if len(df) < 100:
+        return None, "Data kam hai", 0
+    close = df['Close']
+    high = df['High']
+    low = df['Low']
+    
+    rsi = ta.momentum.RSIIndicator(close, 14).rsi()
+    ema9 = ta.trend.EMAIndicator(close, 9).ema_indicator()
+    ema21 = ta.trend.EMAIndicator(close, 21).ema_indicator()
+    macd_diff = ta.trend.MACD(close).macd_diff()
+    bb = ta.volatility.BollingerBands(close, 20, 2)
+    bb_h = bb.bollinger_hband()
+    bb_l = bb.bollinger_lband()
+    atr = ta.volatility.AverageTrueRange(high, low, close, 14).average_true_range()
+
+    last_close = close.iloc[-1]
+    last_rsi = rsi.iloc[-1]
+    last_ema9 = ema9.iloc[-1]
+    last_ema21 = ema21.iloc[-1]
+    last_macd = macd_diff.iloc[-1]
+    last_bb_h = bb_h.iloc[-1]
+    last_bb_l = bb_l.iloc[-1]
+    last_atr = atr.iloc[-1]
+
+    if last_atr < 0.0003:
+        return None, f"Slow Market", int(last_rsi)
+    if abs(last_ema9 - last_ema21) < 0.0001:
+        return None, "Sideways", int(last_rsi)
+
+    call_score = 0
+    if last_rsi < 32: call_score += 1
+    if last_ema9 > last_ema21: call_score += 1
+    if last_macd > 0: call_score += 1
+    if last_close <= last_bb_l * 1.0005: call_score += 1
+    if close.iloc[-2] < ema9.iloc[-2] and last_close > last_ema9: call_score += 1
+
+    put_score = 0
+    if last_rsi > 68: put_score += 1
+    if last_ema9 < last_ema21: put_score += 1
+    if last_macd < 0: put_score += 1
+    if last_close >= last_bb_h * 0.9995: put_score += 1
+    if close.iloc[-2] > ema9.iloc[-2] and last_close < last_ema9: put_score += 1
+
+    if call_score >= 4:
+        return f"STRONG CALL", f"Score {call_score}/5 RSI {last_rsi:.1f}", int(last_rsi)
+    if put_score >= 4:
+        return f"STRONG PUT", f"Score {put_score}/5 RSI {last_rsi:.1f}", int(last_rsi)
+
+    return None, f"RSI {last_rsi:.1f} C:{call_score} P:{put_score}", int(last_rsi)
+
+def scan_market():
+    global last_signals
+    temp = {}
+    for name, symbol in PAIRS.items():
+        df = get_data(symbol)
+        if df.empty:
+            temp[name] = {"signal": "No Data", "reason": "-", "rsi": 0, "time": datetime.now().strftime('%H:%M:%S')}
+            continue
+        signal, reason, rsi = advanced_filter(df)
+        temp[name] = {"signal": signal if signal else "WAIT", "reason": reason, "rsi": rsi, "time": datetime.now().strftime('%H:%M:%S')}
+    last_signals = temp
+
+def scan_loop():
+    while True:
+        try:
+            scan_market()
+        except:
+            pass
+        time.sleep(90)
 
 @app.route('/')
 def home():
-    return render_template_string(HTML_PAGE)
+    html = "<html><head><title>Pocket Bot Live</title><meta http-equiv='refresh' content='60'>"
+    html += "<style>body{font-family:sans-serif;background:#111;color:#fff;padding:20px} .card{background:#222;padding:15px;margin:10px;border-radius:10px;display:inline-block;width:200px} .call{border-left:5px solid #00ff88} .put{border-left:5px solid #ff4444} .wait{border-left:5px solid #555} h1{color:#00ff88} a{color:#0af}</style></head><body>"
+    html += "<h1>Pocket-Bot-2 LIVE</h1>"
+    html += "<p>Use these signals MANUALLY on pocketoption - Do NOT auto-trade.</p>"
+    html += "<p>Auto refresh every 60 sec</p><div>"
+    for pair, data in last_signals.items():
+        cls = "call" if "CALL" in data['signal'] else "put" if "PUT" in data['signal'] else "wait"
+        emoji = "🟢" if "CALL" in data['signal'] else "🔴" if "PUT" in data['signal'] else "⏳"
+        html += f"<div class='card {cls}'><b>{pair}</b><br>{emoji} {data['signal']}<br><small>{data['reason']}</small></div>"
+    html += "</div></body></html>"
+    return html
 
-@app.route('/api/signal')
-def api_signal():
-    return jsonify(current_signal)
+@app.route('/signals')
+def signals():
+    return jsonify(last_signals)
 
-@app.route('/health')
-def health():
-    return "OK Bot Running - Original Real Price"
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+threading.Thread(target=scan_loop, daemon=True).start()
+threading.Thread(target=scan_market, daemon=True).start()
