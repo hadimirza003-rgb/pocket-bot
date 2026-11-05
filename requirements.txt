@@ -1,6 +1,7 @@
-pandas
-yfinance
-flask
-requests
-pyTelegramBotAPI
-ta
+Flask==2.3.3
+gunicorn==21.2.0
+yfinance==0.2.31
+pandas==2.2.2
+ta==0.11.0
+pyTelegramBotAPI==4.14.0
+nest_asyncio==1.6.0
