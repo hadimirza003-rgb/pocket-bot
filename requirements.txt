@@ -1,2 +1,6 @@
-requests==2.31.0
+pandas
+yfinance
+ta
+Flask
 python-telegram-bot==22.3
+gunicorn
